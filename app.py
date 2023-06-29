@@ -64,7 +64,7 @@ with gr.Blocks(theme = gr.themes.Soft()) as demo:
 
     with gr.Row():
       with gr.Column(scale = 1):
-          gr.HTML("""<h1 align="center"><img src="https://andergisomon.github.io/dtp-nlp-demo/huminodun_dall_e.png", alt="" border="0" style="margin: 0 auto; height: 200px;" /></a></h1>""")
+          gr.HTML("""<h1 align="center"><img src="https://user-images.githubusercontent.com/120112847/249789954-8dbadc59-4f39-48fa-a97c-a70998f2c551.png", alt="" border="0" style="margin: 0 auto; height: 200px;" /></a></h1>""")
 
           gr.Markdown("""
           **Huminodun, nulai di somit pongulai kikito DALL-E**
