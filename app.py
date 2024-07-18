@@ -1,14 +1,17 @@
 import os
-os.system("pip install numpy==1.23.0") #NumPy 1.24 or less needed by Numba. Use 1.23, librosa still uses np.complex which was dropped in NumPy 1.24
-os.system("pip install git+https://github.com/huggingface/transformers datasets[torch]")
-os.system("pip install torch accelerate torchaudio datasets librosa easymms")
+os.system("pip install --upgrade transformers accelerate")
+os.system("pip install tokenizers fairseq")
+os.system("pip install numpy==1.24") #NumPy 1.24 or less needed by Numba
+os.system("pip install torch transformers accelerate torchaudio datasets")
+os.system("pip install librosa==0.9.0")
+os.system("pip install gradio==4.16.0") # Rollback to pre 4.17.0 due to gr Audio playback issues
 
+import scipy
 import gradio as gr
-from transformers import pipeline, Wav2Vec2ForCTC, AutoProcessor
+from transformers import pipeline, Wav2Vec2ForCTC, AutoProcessor, VitsModel, AutoTokenizer
 from datasets import load_dataset, Audio, Dataset
 import torch
 import librosa #For converting audio sample rate to 16k
-from easymms.models.tts import TTSModel #For TTS inference using EasyMMS
 
 LANG = "dtp" #Change to tih for Timugon Murut or iba for Iban
 model_id = "facebook/mms-1b-all"
@@ -19,6 +22,9 @@ processor.tokenizer.set_target_lang(LANG)
 model.load_adapter(LANG)
 
 asr_pipeline = pipeline(task = "automatic-speech-recognition", model = model_id) #Function that returns a dict, transcription stored in item with key "text"
+
+model_tts = VitsModel.from_pretrained("facebook/mms-tts-dtp")
+tokenizer_tts = AutoTokenizer.from_pretrained("facebook/mms-tts-dtp")
 
 def preprocess(input): #Sets recording sampling rate to 16k and returns numpy ndarray from audio
   speech, sample_rate = librosa.load(input)
@@ -46,7 +52,7 @@ with gr.Blocks(theme = gr.themes.Soft()) as demo:
             <h1 align="center">Ponutun Tuturan om Pomorolou Sinuat Boros Dusun</h1>
             <h5 align="center">  Poomitanan kopogunaan do somit tutun tuturan om pomorolou sinuat (speech recognition and text-to-speech models)
               pinoluda' di Woyotanud Tuturan Gumukabang Tagayo di Meta (Meta Massive Multilingual Speech Project)</h5>
-            <h6 align = "center">Guguno (app) diti winonsoi di Ander © 2023 id Universiti Teknologi PETRONAS</h6>
+            <h6 align = "center">Guguno (app) diti winonsoi di Ander © 2023-2024 id Universiti Teknologi PETRONAS</h6>
 
             <div style='display:flex; gap: 0.25rem; '>
                 <div class = "image"> <a href='https://github.com/andergisomon/dtp-nlp-demo'><img src='https://img.shields.io/badge/Github-Code-success'></a> </div>
@@ -54,13 +60,16 @@ with gr.Blocks(theme = gr.themes.Soft()) as demo:
             </div>
         """)
 
-    tts = TTSModel(LANG)
 
-    def fn2(input):
-        res = tts.synthesize(input)
-        flip_tuple = (res[1], res[0]) #EasyMMS synthesize() returns Tuple(data, sample_rate) where data is a numpy.array and sample_rate is int,
-                                      #but Gradio Audio() expects the same tuple but with the elements flipped 
-        return flip_tuple
+    def tts_run(input):
+        tokenized_input = tokenizer_tts(input, return_tensors="pt")
+        
+        with torch.no_grad():
+            output = model_tts(**tokenized_input).waveform
+        
+        gradio_tuple = (16000, output[0].detach().cpu().numpy())
+        
+        return gradio_tuple
 
     with gr.Row():
       with gr.Column(scale = 1):
@@ -73,15 +82,15 @@ with gr.Blocks(theme = gr.themes.Soft()) as demo:
           """)
       with gr.Column(scale = 4):
           with gr.Tab("Rolou kumaa ginarit"):
-              input_audio = gr.Audio(source = "microphone", type = "filepath", label = "Gakamai rolou nu")
+              input_audio = gr.Audio(sources = ['microphone'], type = 'filepath', label = "Gakamai rolou nu", format = 'wav')
               output_text = gr.components.Textbox(label = "Dalinsuat")
               button1 = gr.Button("Dalinsuato' | Transcribe")
               button1.click(transcribe, inputs = input_audio, outputs = output_text)
 
           with gr.Tab("Ginarit kumaa rolou"):
-              input_text = gr.components.Textbox(label = "Ginarit", placeholder = "Potutakai suat nu hiti")
+              input_text = gr.components.Textbox(label = "Ginarit", placeholder = "Popupukai suat nu hiti")
               button2 = gr.Button("Poulayo'")
-              output_audio = gr.components.Audio(label = "Rolou pinoulai")
-              button2.click(fn2, inputs = input_text, outputs = output_audio)
+              output_audio = gr.Audio(label = "Rolou pinoulai")
+              button2.click(tts_run, inputs = input_text, outputs = output_audio)
 
 demo.launch(debug = True)
